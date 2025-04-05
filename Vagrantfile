@@ -1,40 +1,45 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
-# Using libvirt (KVM/QEMU Emulator) as a Provider instead of VirtualBox due to compatibility issues
 
+# Configure Vagrant to manage virtual machines
 Vagrant.configure("2") do |config|
-  config.vm.provider :libvirt                   # using libvert (QEMU/KVM) as a provider
 
   # VM 1: Server (Central Management)
   config.vm.define "server" do |server|
-    config.vm.box = "generic/ubuntu2204"        # using ARM compatible Ubuntu box
-    server.vm.hostname = "server"               # setting hostname for server
-    server.vm.network "private_network", ip: "192.168.56.10" # Assigning IP Address
-    server.vm.provider :libvirt do |v|
-      v.memory = 1024                           # Allocate 1GB RAM
-      v.cpus = 1                                # Allocate 1 CPU
+    server.vm.box = "vann/ubuntu-22.04-arm64"
+    server.vm.box_version = "0.0.3"
+    server.vm.hostname = "server"                             # Set the hostname for the server VM
+    server.vm.network "private_network", ip: "192.168.56.10"  # Assign a private IP address
+    server.vm.provider "vmware_desktop" do |vmware|           # Configure settings specific to the VMware provider
+      vmware.memory = 1024                                    # Allocate 1GB RAM
+      vmware.cpus = 1                                         # Allocate 1 CPU
+      vmware.allowlist_verified = true
     end
   end
 
   # VM 2: Client #1
   config.vm.define "client1" do |client|
-    config.vm.box = "generic/ubuntu2204"        # using ARM compatible Ubuntu box
-    client.vm.hostname = "client1"              # setting hostname for client1
-    client.vm.network "private_network", ip: "192.168.56.11" # Assigning IP Address
-    client.vm.provider :libvirt do |v|
-      v.memory = 512                            # Allocate 512MB RAM
-      v.cpus = 1                                # Allocate 1 CPU
+    client.vm.box = "vann/ubuntu-22.04-arm64"
+    client.vm.box_version = "0.0.3"
+    client.vm.hostname = "client1"                            # Set the hostname for Client 1
+    client.vm.network "private_network", ip: "192.168.56.11"  # Assign a private IP address
+    client.vm.provider "vmware_desktop" do |vmware|           # Configure settings specific to the VMware provider
+      vmware.memory = 1024                                    # Allocate 512MB RAM
+      vmware.cpus = 1                                         # Allocate 1 CPU
+      vmware.allowlist_verified = true                        # Enable the use of verified boxes·
     end
   end
 
-  # VM 3: Client2
+  # VM 3: Client #2
   config.vm.define "client2" do |client|
-    config.vm.box = "generic/ubuntu2204"        # using ARM compatible Ubuntu box
-    client.vm.hostname = "client2"              # setting  hostname for client2
-    client.vm.network "private_network", ip: "192.168.56.12"  # Assign IP address
-    client.vm.provider :libvirt do |v|
-      v.memory = 512                            # Allocate 512MB RAM
-      v.cpus = 1                                # Allocate 1 CPU
+    client.vm.box = "vann/ubuntu-22.04-arm64"
+    client.vm.box_version = "0.0.3"
+    client.vm.hostname = "client2"                            # Set the hostname for Client 2
+    client.vm.network "private_network", ip: "192.168.56.12"  # Assign a private IP address
+    client.vm.provider "vmware_desktop" do |vmware|           # Configure settings specific to the VMware provider
+      vmware.memory = 1024                                    # Allocate 512MB RAM
+      vmware.cpus = 1                                         # Allocate 1 CPU
+      vmware.allowlist_verified = true                        # Enable the use of verified boxes
     end
   end
 end
