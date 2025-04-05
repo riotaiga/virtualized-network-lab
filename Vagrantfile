@@ -42,4 +42,17 @@ Vagrant.configure("2") do |config|
       vmware.allowlist_verified = true                        # Enable the use of verified boxes
     end
   end
+
+  # VM 4: Client #3
+  config.vm.define "client3" do |client|
+    client.vm.box = "vann/ubuntu-22.04-arm64"
+    client.vm.box_version = "0.0.3"
+    client.vm.hostname = "client3"                            # Set the hostname for Client 3
+    client.vm.network "private_network", ip: "192.168.56.13"  # Assign a private IP address
+    client.vm.provider "vmware_desktop" do |vmware|           # Configure sertings specific to the VMware provider
+      vmware.memory = 1024                                    # Allocate 512MB RAM
+      vmware.cpus = 1                                         # Allocate 1 CPU
+      vmware.allowlist_verified = true                        # Enable the use of verified boxes
+    end
+  end
 end
