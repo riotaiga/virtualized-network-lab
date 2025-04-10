@@ -24,7 +24,7 @@ Vagrant.configure("2") do |config|
     client.vm.hostname = "client1"                            # Set the hostname for Client 1
     client.vm.network "private_network", ip: "192.168.56.11"  # Assign a private IP address
     client.vm.provider "vmware_desktop" do |vmware|           # Configure settings specific to the VMware provider
-      vmware.memory = 1024                                    # Allocate 512MB RAM
+      vmware.memory = 512                                     # Allocate 512MB RAM
       vmware.cpus = 1                                         # Allocate 1 CPU
       vmware.allowlist_verified = true                        # Enable the use of verified boxes·
     end
@@ -37,7 +37,7 @@ Vagrant.configure("2") do |config|
     client.vm.hostname = "client2"                            # Set the hostname for Client 2
     client.vm.network "private_network", ip: "192.168.56.12"  # Assign a private IP address
     client.vm.provider "vmware_desktop" do |vmware|           # Configure settings specific to the VMware provider
-      vmware.memory = 1024                                    # Allocate 512MB RAM
+      vmware.memory = 512                                     # Allocate 512MB RAM
       vmware.cpus = 1                                         # Allocate 1 CPU
       vmware.allowlist_verified = true                        # Enable the use of verified boxes
     end
@@ -50,7 +50,7 @@ Vagrant.configure("2") do |config|
     client.vm.hostname = "client3"                            # Set the hostname for Client 3
     client.vm.network "private_network", ip: "192.168.56.13"  # Assign a private IP address
     client.vm.provider "vmware_desktop" do |vmware|           # Configure sertings specific to the VMware provider
-      vmware.memory = 1024                                    # Allocate 512MB RAM
+      vmware.memory = 512                                     # Allocate 512MB RAM
       vmware.cpus = 1                                         # Allocate 1 CPU
       vmware.allowlist_verified = true                        # Enable the use of verified boxes
     end
