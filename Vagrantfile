@@ -56,20 +56,7 @@ Vagrant.configure("2") do |config|
     end
   end
 
-  # VM 5: DNS/DHCP Server
-  config.vm.define "dns_dhcp" do |dns|
-    dns.vm.box = "vann/ubuntu-22.04-arm64"
-    dns.vm.box_version = "0.0.3"
-    dhs.vm.hostname = "dns_dhcp"
-    dns.vm.network "private_network", ip: "192.168.56.2"
-    dns.vm.provider "vmware_desktop" do |vmware|
-      vmware.memory = 1024
-      vmware.cpus = 1
-      vmware.allowlist_verified = true
-    end
-  end
-
-  # VM 6: Router
+  # VM 5: Router
   config.vm.define "router" do |router|
     router.vm.box = "vann/ubuntu-22.04-arm64"
     router.box.version = "0.0.3"
