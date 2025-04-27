@@ -69,8 +69,8 @@ Vagrant.configure("2") do |config|
 
   # VM 5: Router
   config.vm.define "router" do |router|
-    client.vm.box = BOX_NAME
-    client.vm.box_version = BOX_VERSION 
+    router.vm.box = BOX_NAME
+    router.vm.box_version = BOX_VERSION 
     router.vm.hostname = "router"                             # Set the hostname for router
     router.vm.network "private_network", ip: "192.168.56.1"   # Assign a private IP address
     router.vm.provider "vmware_desktop" do |vmware|           # Configure settings specific to the VMware provider
