@@ -1,3 +1,5 @@
 # igbore Vagrant local state
 .vagrant/
-.DS_Store/
+
+# Ignore DS_Store File 
+.DS_Store
