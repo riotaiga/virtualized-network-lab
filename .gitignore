@@ -1,0 +1,8 @@
+# igbore Vagrant local state
+.vagrant/
+
+# Ignore DS_Store File 
+.DS_Store
+
+# remove gitignore file 
+.gitignore
