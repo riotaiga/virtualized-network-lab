@@ -1,6 +1,11 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 
+# Vagrantfile: LAN Project 
+# Purpose: Setting up 6 VMs connected with LAN 
+# Using router, server, 3 clients
+# All VMs are connect on same Private Network: 192.168.56.0/24
+
 # Configure Vagrant to manage virtual machines
 Vagrant.configure("2") do |config|
 
