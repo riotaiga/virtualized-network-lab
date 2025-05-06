@@ -6,3 +6,7 @@
 
 # remove gitignore file 
 .gitignore
+
+# remove blueprint files, test files
+./archive/
+./test1/
