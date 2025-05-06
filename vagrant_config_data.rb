@@ -1,5 +1,15 @@
 VM_CONFIG = [
   {
+    name: "dns_dhcp_host",
+    hostname: "dns-dhcp-host",
+    memory: 512,
+    cpus: 1,
+    networks: [
+      { nwtype: "public_network", type: "dhcp", nic: 2 }  # enp0s8
+    ],
+    provision: "provision/dns_dhcp_host.sh"
+  },
+  {
     name: "mgmt",
     hostname: "mgmt",
     memory: 1024,
@@ -25,17 +35,6 @@ VM_CONFIG = [
     ],
     provision: "provision/router.sh"
   },
-  {
-    name: "dns_dhcp_host",
-    hostname: "dns-dhcp-host",
-    memory: 512,
-    cpus: 1,
-    networks: [
-      { nwtype: "public_network", type: "dhcp", nic: 2 }  # enp0s8
-    ],
-    provision: "provision/dns_dhcp_host.sh"
-  },
-
   {
     name: "dns_dhcp_lan",
     hostname: "dns-dhcp-lan",
