@@ -1,306 +1,41 @@
-# -*- mode: ruby -*-
-# vi: set ft=ruby :
-
 Vagrant.configure("2") do |config|
-  config.vm.provider "virtualbox" do |v|
-    v.gui = false
-  end
-  # Set variable for box and version 
-  BOX_NAME = "ubuntu/focal64"
-  BOX_VERSION = "20240821.0.1"
+  require_relative "vagrant_config_data"
 
-  # VM 1: DNS/DHCP Server for 192.168.4.X and 192.168.5.X network 
-  config.vm.define "dns_dhcp_lan" do |dns_dhcp_lan|
-    dns_dhcp_lan.vm.box = BOX_NAME
-    dns_dhcp_lan.vm.box_version = BOX_VERSION
-    dns_dhcp_lan.vm.hostname = "dns-dhcp-lan" 
-    dns_dhcp_lan.vm.network "private_network", ip: "192.168.4.20", auto_config: false, virtualbox__intnet: "net4"
-    dns_dhcp_lan.vm.network "private_network", ip: "192.168.5.20", auto_config: false, virtualbox__intnet: "net5"
-    #dns_dhcp_lan.vm.network "private_network", auto_config: false, id: "dns_dhcp_lan4"
-    #dns_dhcp_lan.vm.network "private_network", auto_config: false, id: "dns_dhcp_lan5"
-    dns_dhcp_lan.vm.provision "shell", inline: <<-SHELL
-      # USING HEREDOC 
-      cat <<EOF > /etc/netplan/01-netcfg.yaml
-network:
-  version: 2
-  ethernets:
-    enp0s8:
-      dhcp4: no
-      addresses: [192.168.4.20/24]
-      routes:
-        - to: default
-          via: 192.168.4.1
-      nameservers:
-        addresses: [8.8.8.8]
-    enp0s9:
-      dhcp4: no
-      addresses: [192.168.5.20/24]
-EOF
+  VM_CONFIG.each do |vm|
+    config.vm.define vm[:name] do |node|
+      node.vm.hostname = vm[:hostname]
+      node.vm.box = "ubuntu/focal64"
 
-      systemctl stop systemd-resolved
-      systemctl disable systemd-resolved
-      rm -f /etc/resolv.conf
-      echo "nameserver 8.8.8.8" > /etc/resolv.conf
-      
-      # install requred package
-      apt-get update 
-      apt-get install -y dnsmasq net-tools
-      #rm /etc/resolv.conf
-      #ln -s /run/dnsmasq/resolv.conf /etc/resolv.conf
-      netplan generate
-      netplan apply
-      sleep 3 
+      node.vm.provider :virtualbox do |vb|
+        vb.name = vm[:name]
+        vb.memory = vm[:memory]
+        vb.cpus = vm[:cpus]
+      end
 
-      # Find interface names based on static IPs
-      IFACE4=$(ip -o addr show | awk '/192\.168\.4\.20/ {print $2}')
-      IFACE5=$(ip -o addr show | awk '/192\.168\.5\.20/ {print $2}')
+      # Prevent default NAT SSH port forwarding
+      if vm[:forwarded_ports]&.empty?
+        node.vm.network "forwarded_port", guest: 22, host: nil
+      end
 
-      echo "Interface for 192.168.4.20: $IFACE4"
-      echo "Interface for 192.168.5.20: $IFACE5"
+      vm[:networks].each do |net|
+        # Build network options
+        options = { adapter: net[:nic] }
+        options[:virtualbox__intnet] = net[:virtualbox__intnet] if net[:virtualbox__intnet]
+        options[:auto_config] = net[:auto_config] if net.key?(:auto_config)
 
-      # USING HEREDOC 
-      cat <<EOF > /etc/dnsmasq.conf 
-# Provide DHCP Configuration
-interface=$IFACE4                                                            # provide specific interface
-listen-address=192.168.4.20
-interface=$IFACE5
-listen-address=192.168.5.20
-bind-interfaces                                                           # to provide no conflict between interface
-dhcp-range=192.168.4.100,192.168.4.150,24h            
-dhcp-option=3,192.168.4.1                                            # DHCP option code 3 represents router
-dhcp-option=6,192.168.4.20                                           # DHCP option code 6 represents DNS
-   
-# DHCP for 192.168.5.0/24 
-dhcp-range=192.168.5.100,192.168.5.150,24h 
-dhcp-option=3,192.168.5.1                                            # DHCP option code 3 represents router
-dhcp-option=6,192.168.5.20                                           # DHCP option code 6 represents DNS 
+        case net[:nwtype]
+        when "private_network"
+          if net[:ip]
+            node.vm.network :private_network, ip: net[:ip], **options
+          else
+            node.vm.network :private_network, type: "dhcp", **options
+          end
+        when "public_network"
+          node.vm.network :public_network, type: "dhcp", **options
+        end
+      end
 
-
-
-EOF
-      systemctl restart dnsmasq   
-      echo "~* DNS/DHCP Server is Ready. *~"
-    SHELL
-    
-    dns_dhcp_lan.vm.provider "virtualbox" do |vb| 
-      vb.memory = 1024
-      vb.cpus = 1
-       
-    end
-  end
-
-  # VM 2: DNS/DHCP Server on Host network (receives IP from host DHCP)
-  config.vm.define "dns_dhcp_host" do |dns_dhcp_host|
-    dns_dhcp_host.vm.box = BOX_NAME
-    dns_dhcp_host.vm.box_version = BOX_VERSION
-    dns_dhcp_host.vm.hostname = "dns-dhcp-host"
-
-    # Error occurred due to "Network specified with `:hostname` must provide a static ip"
-    dns_dhcp_host.vm.network "public_network", type: "dhcp"                       # DHCP embedded network 
-
-    dns_dhcp_host.vm.provision "shell", inline: <<-SHELL
-      # Disable systemd-resolved to prevent DNS resolution conflicts
-      systemctl stop systemd-resolved
-      systemctl disable systemd-resolved
-      rm -f /etc/resolv.conf
-
-      # Manually set Google's public DNS
-      echo "nameserver 8.8.8.8" | sudo tee /etc/resolv.conf
-
-      # Update the system and install necessary packages
-      apt-get update
-      apt-get install -y dnsmasq net-tools iputils-ping
-
-      echo "~* dns-dhcp-host received the IP through embedded DHCP *~"
-    SHELL
-
-    dns_dhcp_host.vm.provider "virtualbox" do |vb|
-      vb.memory = 1024
-      vb.cpus = 1
-       
-    end
-  end
-
-  # VM 3: Router
-  config.vm.define "router" do |router|
-    router.vm.box = BOX_NAME
-    router.vm.box_version = BOX_VERSION 
-    router.vm.hostname = "router"                                                 # Set the hostname for router
-
-    router.vm.network "private_network", auto_config: false, virtualbox__intnet: "inet4"      # Assign a private IP address
-    router.vm.network "private_network", auto_config: false, virtualbox__intnet: "inet5"      # Assign a private IP address
-    router.vm.network "public_network", bridge: "en0", auto_config: true          # Assign bridge to connect to internet          
-    # Note: Install iptables and figure out how to set the firewall using iptables command
-    router.vm.provision "shell", inline: <<-SHELL
-      # update and install package
-      apt-get update
-      apt-get install -y net-tools 
-
-      # Enable IP forwarding
-      sed -i 's/#net.ipv4.ip_forward=1/net.ipv4.ip_forward=1/' /etc/sysctl.conf
-
-      # USING HEREDOC 
-      cat <<EOF > /etc/netplan/01-netcfg.yaml
-network:
-  version: 2
-  ethernets:
-    enp0s8:
-      dhcp4: no
-      addresses: [192.168.4.1/24]
-    enp0s9:
-      dhcp4: no
-      addresses: [192.168.5.1/24]
-    enp0s10:
-      dhcp4: true
-EOF
-      netplan generate
-      netplan apply
-
-      # Apply NAT for internet access from LANs
-      iptables -t nat -A POSTROUTING -o enp0s10 -j MASQUERADE
-      iptables -A FORWARD -i enp0s8 -o enp0s10 -j ACCEPT
-      iptables -A FORWARD -i enp0s9 -o enp0s10 -j ACCEPT
-      
-      echo "############ NETWORK INTERFACE CHECK ##############"
-      ip addr show
-      ip route show
-
-      echo "~* Router VM is Ready. *~"
-    SHELL
-
-    router.vm.provider "virtualbox" do |vb|                               # Configure settings specific to the vb provider
-      vb.memory = 1024                                                        # Allocate 1 GB RAM 
-      vb.cpus = 1                                                             # Allocate 1 CPU
-    end
-  end
-
-  #VM 4: MGMT Server
-  config.vm.define "mgmt" do |mgmt|
-    mgmt.vm.box = BOX_NAME
-    mgmt.vm.box_version = BOX_VERSION
-    mgmt.vm.hostname = "mgmt-server"
-
-    # Review this 
-    mgmt.vm.network "private_network", auto_config: false, virtualbox__intnet: "net4"    # explicitly say that it should configured as ip address
-    mgmt.vm.network "private_network", auto_config: false, virtualbox__intnet: "net5"    # explicitly say that it should configured as ip address
-    mgmt.vm.network "public_network", bridge: "en0", auto_config: true      # public bridged network
-    mgmt.vm.provision "shell", inline: <<-SHELL
-      apt-get update
-      apt-get install -y iputils-ping   
-
-    # USING HEREDOC 
-      cat <<EOF > /etc/netplan/01-netcfg.yaml 
-network:
-  version: 2
-  ethernets:
-    enp0s8:
-      dhcp4: no
-      addresses: [192.168.4.10/24]
-    enp0s9:
-      dhcp4: no
-      addresses: [192.168.5.10/24]
-      nameservers:
-        addresses: [192.168.4.20, 8.8.8.8]
-      routes:
-        - to: default
-          via: 192.168.5.1
-    enp0s10:
-      dhcp4: true
-EOF
-      netplan apply
-      echo "############ NETWORK INTERFACE CHECK ##############"
-      ip addr show
-      ip route show                                 
-      echo "~* MGMT Server is ready on 192.168.4.10 and 192.168.5.10 *~"
-    SHELL
-
-    mgmt.vm.provider "virtualbox" do |vb| 
-      vb.memory = 1024
-      vb.cpus = 1
-    end
-  end
-
-  #VM 5: Client1 Server for 192.168.4.X and 192.168.5.X network 
-  config.vm.define "client1" do |client|
-    client.vm.box = BOX_NAME
-    client.vm.box_version = BOX_VERSION
-    client.vm.hostname = "client1" 
-    client.vm.network "private_network", type: "dhcp", auto_config: false, virtualbox__intnet: "net4"              
-    client.vm.network "private_network", type: "dhcp", auto_config: false, virtualbox__intnet: "net5" 
-    client.vm.provision "shell", inline: <<-SHELL
-      apt-get update
-      apt-get install -y network-manager net-tools
-
-      # USING HEREDOC to configure netplan
-      cat <<EOF > /etc/netplan/01-network-manager.yaml
-network:
-  version: 2
-  renderer: NetworkManager
-  ethernets:
-    enp0s8:
-      dhcp4: true
-    enp0s9:
-      dhcp4: true
-EOF
-      netplan generate
-      netplan apply
-      systemctl restart NetworkManager
-
-      echo "############## ROUTES ##################"
-      sleep 5
-      ip addr show
-      ip route show
-
-      # Check status for both systemd-networkd, NetworkManager
-      systemctl status systemd-networkd
-
-      echo "~* Client1 VM is ready. *~"
-    SHELL
-
-    client.vm.provider "virtualbox" do |vb| 
-      vb.memory = 1024
-      vb.cpus = 1
-       
-    end
-  end
-
-
-  #VM 6: Client2 for 192.168.4.X and 192.168.5.X network
-  config.vm.define "client2" do |client|
-    client.vm.box = BOX_NAME
-    client.vm.box_version = BOX_VERSION
-    client.vm.hostname = "client2" 
-    client.vm.network "private_network", auto_config: false, virtualbox__intnet: "net4"
-    client.vm.network "private_network", auto_config: false, virtualbox__intnet: "net5"          
-
-    client.vm.provision "shell", inline: <<-SHELL
-      apt-get update
-      apt-get install -y network-manager net-tools
-      # USING HEREDOC
-      cat <<EOF > /etc/netplan/01-netcfg.yaml
-network: 
-  version: 2
-  renderer: NetworkManager
-  ethernets:
-    enp0s8:
-      dhcp4: true
-    enp0s9:
-      dhcp4: true
-EOF
-      netplan generate
-      netplan apply
-      systemctl restart NetworkManager
-
-      echo "############ NETWORK INTERFACE CHECK ##############"
-      sleep 5
-      ip addr show
-      ip route show
-      echo "~* Web Server VM is ready. *~"
-    SHELL
-
-    client.vm.provider "virtualbox" do |vb| 
-      vb.memory = 1024
-      vb.cpus = 1
+      node.vm.provision "shell", path: vm[:provision]
     end
   end
 end

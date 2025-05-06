@@ -1,0 +1,108 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+# This Vagrantfile sets up a virtual lab consisting of 6 virtual machines with predictable network interface naming.
+# The VM roles are: router, dns_dhcp_lan, dns_dhcp_host, mgmt, client1, and client2.
+# Each VM is configured with relevant IPs and roles, using VirtualBox NIC slot assignment to ensure enp0s4 (for 192.168.4.X) and enp0s5 (for 192.168.5.X) naming.
+
+VAGRANTFILE_API_VERSION = "2"
+
+# Constants for predictable NIC assignments
+NIC4_SLOT = 2  # Maps to enp0s4 → 192.168.4.X network
+NIC5_SLOT = 3  # Maps to enp0s5 → 192.168.5.X network
+
+# VM configuration data
+VMs = {
+  "router" => {
+    :hostname => "router",
+    :ip4 => "192.168.4.1",
+    :ip5 => "192.168.5.1",
+    :box => "ubuntu/focal64",
+    :ram => 256,
+    :cpus => 1,
+    :provision => "provision/router.sh"
+  },
+  "dns_dhcp_lan" => {
+    :hostname => "dns-dhcp-lan",
+    :ip4 => "192.168.4.20",
+    :ip5 => "192.168.5.20",
+    :box => "ubuntu/focal64",
+    :ram => 256,
+    :cpus => 1,
+    :provision => "provision/dns_dhcp_lan.sh"
+  },
+  "dns_dhcp_host" => {
+    :hostname => "dns-dhcp-host",
+    :box => "ubuntu/focal64",
+    :ram => 256,
+    :cpus => 1,
+    :provision => "provision/dns_dhcp_host.sh"
+  },
+  "mgmt" => {
+    :hostname => "mgmt",
+    :ip4 => "192.168.4.10",
+    :ip5 => "192.168.5.10",
+    :box => "ubuntu/focal64",
+    :ram => 512,
+    :cpus => 1,
+    :provision => "provision/mgmt.sh"
+  },
+  "client1" => {
+    :hostname => "client1",
+    :ip4_dhcp => true,
+    :ip5_dhcp => true,
+    :box => "ubuntu/focal64",
+    :ram => 256,
+    :cpus => 1,
+    :provision => "provision/client1.sh"
+  },
+  "client2" => {
+    :hostname => "client2",
+    :ip4_dhcp => true,
+    :ip5_dhcp => true,
+    :box => "ubuntu/focal64",
+    :ram => 256,
+    :cpus => 1,
+    :provision => "provision/client2.sh"
+  }
+}
+
+Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
+
+  VMs.each do |name, opts|
+    config.vm.define name do |vm|
+      vm.vm.box = opts[:box]
+      vm.vm.hostname = opts[:hostname]
+      vm.vm.provider "virtualbox" do |vb|
+        vb.name = name
+        vb.memory = opts[:ram]
+        vb.cpus = opts[:cpus]
+      end
+
+      # Shared synced folder (optional)
+      vm.vm.synced_folder ".", "/vagrant", disabled: true
+
+      # NAT interface for internet access
+      vm.vm.network "public_network", bridge: "en0: Wi-Fi (Wireless)", auto_config: true
+
+      # Attach to 192.168.4.X network (static or DHCP)
+      if opts[:ip4]
+        vm.vm.network "private_network", ip: opts[:ip4], auto_config: false, virtualbox__intnet: "net4", adapter: NIC4_SLOT
+      elsif opts[:ip4_dhcp]
+        vm.vm.network "private_network", type: "dhcp", auto_config: false, virtualbox__intnet: "net4", adapter: NIC4_SLOT
+      end
+
+      # Attach to 192.168.5.X network (static or DHCP)
+      if opts[:ip5]
+        vm.vm.network "private_network", ip: opts[:ip5], auto_config: false, virtualbox__intnet: "net5", adapter: NIC5_SLOT
+      elsif opts[:ip5_dhcp]
+        vm.vm.network "private_network", type: "dhcp", auto_config: false, virtualbox__intnet: "net5", adapter: NIC5_SLOT
+      end
+
+      # Run provisioning script
+      if opts[:provision]
+        vm.vm.provision "shell", path: opts[:provision]
+      end
+    end
+  end
+end

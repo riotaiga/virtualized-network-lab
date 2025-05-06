@@ -1,0 +1,305 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant.configure("2") do |config|
+  # Global provider settings
+  config.vm.provider "virtualbox" do |v|
+    v.gui = false
+  end
+
+  # Common VM box and version
+  BOX_NAME = "ubuntu/focal64"
+  BOX_VERSION = "20240821.0.1"
+
+  # Define all VMs in a loop-friendly structure
+  vm_definitions = [
+    
+    #####################
+    # VM1: dns_dhcp_lan
+    #####################
+    {
+      name: "dns_dhcp_lan",
+      hostname: "dns-dhcp-lan",
+      networks: [
+        { type: "private_network", ip: "192.168.4.20", auto_config: false, intnet: "net4" },
+        { type: "private_network", ip: "192.168.5.20", auto_config: false, intnet: "net5" }
+      ],
+      memory: 1024,
+      cpus: 1,
+      provision: <<-SHELL
+        # Configure static IPs using netplan
+        cat <<EOF > /etc/netplan/01-netcfg.yaml
+network:
+  version: 2
+  ethernets:
+    enp0s8:
+      dhcp4: no
+      addresses: [192.168.4.20/24]
+      routes:
+        - to: default
+          via: 192.168.4.1
+      nameservers:
+        addresses: [8.8.8.8]
+    enp0s9:
+      dhcp4: no
+      addresses: [192.168.5.20/24]
+EOF
+
+        # Disable systemd-resolved and manually set DNS
+        systemctl stop systemd-resolved
+        systemctl disable systemd-resolved
+        rm -f /etc/resolv.conf
+        echo "nameserver 8.8.8.8" > /etc/resolv.conf
+
+        # Install dnsmasq and apply netplan
+        apt-get update
+        apt-get install -y dnsmasq net-tools
+        netplan generate
+        netplan apply
+        sleep 3
+
+        # Get actual interface names
+        INTERFACE4=$(ip -o addr show | awk '/192\\.168\\.4\\.20/ {print $2}')
+        INTERFACE5=$(ip -o addr show | awk '/192\\.168\\.5\\.20/ {print $2}')
+
+        # Configure dnsmasq for DHCP on both interfaces
+        cat <<EOF > /etc/dnsmasq.conf
+interface=$INTERFACE4
+listen-address=192.168.4.20
+interface=$INTERFACE5
+listen-address=192.168.5.20
+bind-interfaces
+dhcp-range=192.168.4.100,192.168.4.150,24h
+dhcp-option=3,192.168.4.1                              # DHCP option code 3 represents router
+dhcp-option=6,192.168.4.20                             # DHCP option code 6 represents DNS
+dhcp-range=192.168.5.100,192.168.5.150,24h
+dhcp-option=3,192.168.5.1                              # DHCP option code 3 represents router
+dhcp-option=6,192.168.5.20                             # DHCP option code 6 represents DNS
+EOF
+
+        systemctl restart dnsmasq
+        sleep 10
+        ip route show
+        echo "~* DNS/DHCP Server is Ready. *~"
+      SHELL
+    },
+
+    ########################
+    # VM2: dns_dhcp_host 
+    ########################
+    {
+      name: "dns_dhcp_host",
+      hostname: "dns-dhcp-host",
+      networks: [
+        { type: "public_network", bridge: "en0", auto_config: true }
+      ],
+      memory: 1024,
+      cpus: 1,
+      provision: <<-SHELL
+        systemctl stop systemd-resolved
+        systemctl disable systemd-resolved
+        rm -f /etc/resolv.conf
+        echo "nameserver 8.8.8.8" > /etc/resolv.conf
+        apt-get update
+        apt-get install -y dnsmasq net-tools iputils-ping
+        echo "~* dns-dhcp-host received the IP through embedded DHCP *~"
+      SHELL
+    },
+
+    ########################
+    # VM3: router
+    ########################
+    {
+      name: "router",
+      hostname: "router",
+      networks: [
+        { type: "private_network", auto_config: false, intnet: "inet4" },
+        { type: "private_network", auto_config: false, intnet: "inet5" },
+        { type: "public_network", bridge: "en0", auto_config: true }
+      ],
+      memory: 1024,
+      cpus: 1,
+      provision: <<-SHELL
+        apt-get update
+        apt-get install -y net-tools
+
+        sed -i 's/#net.ipv4.ip_forward=1/net.ipv4.ip_forward=1/' /etc/sysctl.conf
+
+        cat <<EOF > /etc/netplan/01-netcfg.yaml
+network:
+  version: 2
+  ethernets:
+    enp0s8:
+      dhcp4: no
+      addresses: [192.168.4.1/24]
+    enp0s9:
+      dhcp4: no
+      addresses: [192.168.5.1/24]
+    enp0s10:
+      dhcp4: true
+EOF
+
+        netplan generate
+        netplan apply
+
+        iptables -t nat -A POSTROUTING -o enp0s10 -j MASQUERADE
+        iptables -A FORWARD -i enp0s8 -o enp0s10 -j ACCEPT
+        iptables -A FORWARD -i enp0s9 -o enp0s10 -j ACCEPT
+
+        sleep 10
+        ip route show
+        echo "~* Router VM is Ready. *~"
+      SHELL
+    },
+    
+    #########################
+    # VM 4: management server
+    #########################
+    {
+      name: "mgmt",
+      hostname: "mgmt-server",
+      networks: [
+        { type: "private_network", auto_config: false, intnet: "net4" },
+        { type: "private_network", auto_config: false, intnet: "net5" },
+        { type: "public_network", bridge: "en0", auto_config: true }
+      ],
+      memory: 1024,
+      cpus: 1,
+      provision: <<-SHELL
+        apt-get update
+        apt-get install -y iputils-ping
+
+        cat <<EOF > /etc/netplan/01-netcfg.yaml
+network:
+  version: 2
+  ethernets:
+    enp0s8:
+      dhcp4: no
+      addresses: [192.168.4.10/24]
+    enp0s9:
+      dhcp4: no
+      addresses: [192.168.5.10/24]
+      nameservers:
+        addresses: [192.168.4.20, 8.8.8.8]
+      routes:
+        - to: default
+          via: 192.168.5.1
+    enp0s10:
+      dhcp4: true
+EOF
+
+        netplan apply
+        sleep 10
+        ip route show
+        echo "~* MGMT Server is ready on 192.168.4.10 and 192.168.5.10 *~"
+      SHELL
+    },
+    
+    ####################
+    # VM 5: client1 
+    ####################
+    {
+      name: "client1",
+      hostname: "client1",
+      networks: [
+        { type: "private_network", intnet: "net4", auto_config: false, dhcp: true },
+        { type: "private_network", intnet: "net5", auto_config: false, dhcp: true }
+      ],
+      memory: 1024,
+      cpus: 1,
+      provision: <<-SHELL
+        apt-get update
+        apt-get install -y network-manager net-tools
+
+        cat <<EOF > /etc/netplan/01-network-manager.yaml
+network:
+  version: 2
+  renderer: NetworkManager
+  ethernets:
+    enp0s8:
+      dhcp4: true
+    enp0s9:
+      dhcp4: true
+EOF
+
+        netplan generate
+        netplan apply
+        systemctl restart NetworkManager
+        sleep 10
+        ip route show
+        echo "~* Client1 VM is ready. *~"
+      SHELL
+    },
+
+    ###################
+    # VM 6: client2
+    ###################
+    {
+      name: "client2",
+      hostname: "client2",
+      networks: [
+        { type: "private_network", intnet: "net4", auto_config: false },
+        { type: "private_network", intnet: "net5", auto_config: false }
+      ],
+      memory: 1024,
+      cpus: 1,
+      provision: <<-SHELL
+        apt-get update
+        apt-get install -y network-manager net-tools
+
+        cat <<EOF > /etc/netplan/01-netcfg.yaml
+network:
+  version: 2
+  renderer: NetworkManager
+  ethernets:
+    enp0s8:
+      dhcp4: true
+    enp0s9:
+      dhcp4: true
+EOF
+
+        netplan generate
+        netplan apply
+        systemctl restart NetworkManager
+        sleep 10
+        ip route show
+        echo "~* Client2 VM is ready. *~"
+      SHELL
+    }
+  ]
+
+  # Create each VM using the data structure based on the VM array above
+  vm_definitions.each do |vm|
+    config.vm.define vm[:name] do |node|
+      node.vm.box = BOX_NAME
+      node.vm.box_version = BOX_VERSION
+      node.vm.hostname = vm[:hostname]
+
+      # Configure each network
+      vm[:networks].each do |net|
+        if net[:type] == "private_network"
+          options = {
+            type: "dhcp",
+            auto_config: net[:auto_config],
+            virtualbox__intnet: net[:intnet]
+          }
+          options[:ip] = net[:ip] if net.key?(:ip)
+          node.vm.network "private_network", **options
+        elsif net[:type] == "public_network"
+          options = { auto_config: net[:auto_config] }
+          options[:bridge] = net[:bridge] if net[:bridge]
+          node.vm.network "public_network", **options
+        end
+      end
+
+      # Provisioning script
+      node.vm.provision "shell", inline: vm[:provision]
+
+      # Provider-specific configuration
+      node.vm.provider "virtualbox" do |vb|
+        vb.memory = vm[:memory]
+        vb.cpus = vm[:cpus]
+      end
+    end
+  end
+end
