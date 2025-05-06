@@ -23,7 +23,7 @@ interface=enp0s8
 dhcp-range=192.168.2.100,192.168.2.150,12h
 dhcp-option=3,192.168.2.1
 dhcp-option=6,8.8.8.8
-EOF
+EOF  
 
 # Restart dnsmasq service
 systemctl restart dnsmasq

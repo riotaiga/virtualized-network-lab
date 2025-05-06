@@ -27,3 +27,4 @@ iptables -A FORWARD -i enp0s8 -o enp0s10 -j ACCEPT
 sleep 10
 ip route show
 echo "~* Router is ready *~"
+ 

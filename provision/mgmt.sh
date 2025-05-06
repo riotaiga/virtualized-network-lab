@@ -34,7 +34,7 @@ sleep 3
 INTERFACE5=$(ip -o addr show | awk '/192\.168\.5\.10/ {print $2}')
 echo "Interface for 192.168.5.10: $INTERFACE5"
 
-# Configure dnsmasq
+# Configure dnsmasq 
 cat <<EOF > /etc/dnsmasq.conf
 interface=$INTERFACE5
 listen-address=192.168.5.10

@@ -1,6 +1,6 @@
 #!/bin/bash
 apt-get update
-apt-get install -y network-manager net-tools
+apt-get install -y network-manager net-tools 
 
 # Use NetworkManager for dynamic IPs
 cat <<EOF > /etc/netplan/01-network-manager.yaml

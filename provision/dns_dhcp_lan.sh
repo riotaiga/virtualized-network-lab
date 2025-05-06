@@ -42,7 +42,7 @@ bind-interfaces
 dhcp-range=192.168.4.100,192.168.4.150,24h
 dhcp-option=3,192.168.4.1
 dhcp-option=6,192.168.4.20
-EOF
+EOF 
 
 systemctl restart dnsmasq
 sleep 5
