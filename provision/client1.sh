@@ -11,7 +11,7 @@ network:
     enp0s8:
       dhcp4: true
     enp0s9:
-      dhcp4: true
+      dhcp4: true 
 EOF
 
 netplan generate && netplan apply

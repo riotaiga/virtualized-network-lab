@@ -9,7 +9,7 @@ network:
   renderer: NetworkManager
   ethernets:
     enp0s8:
-      dhcp4: true
+      dhcp4: true 
     enp0s9:
       dhcp4: true
 EOF

@@ -9,7 +9,7 @@ echo "nameserver 8.8.8.8" > /etc/resolv.conf
 # Install necessary packages
 apt-get update
 apt-get install -y dnsmasq net-tools iputils-ping
-
+ 
 # Configure network interfaces
 echo "Configuring enp0s8 (public network)..."
 # Ensuring the interface enp0s8 is configured with a static IP if necessary

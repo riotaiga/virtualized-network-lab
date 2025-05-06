@@ -35,7 +35,7 @@ INTERFACE4=$(ip -o addr show | awk '/192\.168\.4\.20/ {print $2}')
 
 echo "Interface for 192.168.4.20: $INTERFACE4"
 # Configure dnsmasq
-cat <<EOF > /etc/dnsmasq.conf
+cat <<EOF > /etc/dnsmasq.conf 
 interface=$INTERFACE4
 listen-address=192.168.4.20
 bind-interfaces

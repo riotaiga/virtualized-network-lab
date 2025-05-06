@@ -24,7 +24,7 @@ netplan generate && netplan apply
 iptables -t nat -A POSTROUTING -o enp0s10 -j MASQUERADE
 iptables -A FORWARD -i enp0s8 -o enp0s10 -j ACCEPT
 
-sleep 10
+sleep 10 
 ip route show
 echo "~* Router is ready *~"
  
