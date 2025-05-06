@@ -1,12 +1,9 @@
-# igbore Vagrant local state
+# Ignore Vagrant local state
 .vagrant/
 
-# Ignore DS_Store File 
+# Ignore macOS metadata files
 .DS_Store
 
-# remove gitignore file 
-.gitignore
-
-# remove blueprint files, test files
-./archive/
-./test1/
+# Ignore blueprint and test directories
+archive/
+test1/
