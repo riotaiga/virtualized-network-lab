@@ -1,6 +1,6 @@
 #!/bin/bash
 apt-get update
-apt-get install -y net-tools
+apt-get install -y net-tools openssh-server
 
 # Enable IP forwarding
 sed -i 's/#net.ipv4.ip_forward=1/net.ipv4.ip_forward=1/' /etc/sysctl.conf
@@ -15,6 +15,7 @@ network:
       addresses: [192.168.4.1/24]
     enp0s9:
       dhcp4: true
+    enp0s10:
       dhcp4: true
 EOF
 

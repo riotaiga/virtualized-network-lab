@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Configure sttic IPs via netplan
+# Configure static IPs via netplan
 cat <<EOF > /etc/netplan/01-netcfg.yaml
 network:
   version: 2
@@ -25,7 +25,7 @@ echo "nameserver 8.8.8.8" > /etc/resolv.conf
 
 # install requred package
 apt-get update 
-apt-get install -y dnsmasq net-tools
+apt-get install -y dnsmasq net-tools openssh-server
 netplan generate
 netplan apply
 sleep 3 

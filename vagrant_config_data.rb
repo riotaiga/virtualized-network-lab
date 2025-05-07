@@ -31,7 +31,7 @@ VM_CONFIG = [
         virtualbox__intnet: "inet4", nic: 2 },  # enp0s8
       { nwtype: "private_network", type: "dhcp",
         virtualbox__intnet: "inet5", nic: 3 },          # enp0s9
-      { nwtype: "public_network", type: "dhcp", nic: 4 }                    # enp0s10
+      { nwtype: "public_network", type: "dhcp", nic: 4, bridge: "Intel(R) Ethernet Connection" }  # enp0s10
     ],
     provision: "provision/router.sh"
   },

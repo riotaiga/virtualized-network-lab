@@ -8,10 +8,8 @@ echo "nameserver 8.8.8.8" > /etc/resolv.conf
 
 # Install necessary packages
 apt-get update
-apt-get install -y dnsmasq net-tools iputils-ping
+apt-get install -y dnsmasq net-tools iputils-ping openssh-server
  
-# Configure network interfaces
-echo "Configuring enp0s8 (public network)..."
 # Ensuring the interface enp0s8 is configured with a static IP if necessary
 ip addr add 192.168.2.20/24 dev enp0s8
 ip link set enp0s8 up

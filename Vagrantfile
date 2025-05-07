@@ -31,7 +31,9 @@ Vagrant.configure("2") do |config|
             node.vm.network :private_network, type: "dhcp", **options
           end
         when "public_network"
-          node.vm.network :public_network, type: "dhcp", **options
+          options[:type] = net[:type] if net[:type]
+          options[:bridge] = net[:bridge] if net[:bridge]
+          node.vm.network :public_network, **options
         end
       end
 
