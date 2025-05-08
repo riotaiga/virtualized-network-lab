@@ -6,7 +6,8 @@
 
 # Ignore blueprint and test directories
 archive/
-test1/
-test2/
-test3/
-network-lab.zip
+test*/
+*.zip
+
+# remove public key from the repo
+ssh_keys/
