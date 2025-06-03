@@ -20,20 +20,27 @@ else
     echo "Management server public key not found in /vagrant/ssh_keys."
 fi
 
-# Use NetworkManager for dynamic IPs
+# Use NetworkManager for dynamic IPs:
 cat <<EOF > /etc/netplan/01-network-manager.yaml
 network:
   version: 2
   renderer: NetworkManager
   ethernets:
     enp0s8:
-      dhcp4: true
+      dhcp4: true                 
+      routes: 
+        - to: 0.0.0.0/0            # adding default route   
+          via: 192.168.4.1         # gateway for the enp0s8
+          metric: 99               # lower metric for higher priority 
     enp0s9:
       dhcp4: true 
 EOF
 
+# generate and apply netplan configuration
 netplan generate && netplan apply
 systemctl restart NetworkManager
 sleep 10
+
+# show the routing table
 ip route show
 echo "~* client1 is DHCP-configured from both dns_dhcp_lan amd mgmt*~"

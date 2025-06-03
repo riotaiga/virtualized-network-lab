@@ -8,6 +8,13 @@
 archive/
 test*/
 *.zip
+redhat-test/
+
+# ignore .txt comment for notes 
+*.txt
 
 # remove public key from the repo
 ssh_keys/
+
+# Ignore .drawio file 
+*.drawio

@@ -1,6 +1,12 @@
 #!/bin/bash
+
+# Install Apache web server
 apt-get update
-apt-get install -y network-manager net-tools openssh-server
+apt-get install -y apache2 openssh-server
+
+# Enable and start Apache service
+systemctl enable apache2
+systemctl start apache2
 
 # enable and start the ssh service
 systemctl enable ssh
@@ -20,27 +26,27 @@ else
     echo "Management server public key not found in /vagrant/ssh_keys."
 fi
 
-# Use NetworkManager for dynamic IPs
-cat <<EOF > /etc/netplan/01-network-manager.yaml
-network: 
+# Configure static and DHCP IPs using netplan
+cat <<EOF > /etc/netplan/01-netcfg.yaml
+network:
   version: 2
-  renderer: NetworkManager
   ethernets:
-    enp0s8:
-      dhcp4: true 
-      routes: 
-        - to: 0.0.0.0/0           # adding default route        
-          via: 192.168.4.1        # gateway for the enp0s8
-          metric: 99              # lower metric for higher priority
-    enp0s9:
-      dhcp4: true
+    enp0s8:  # Interface for 192.168.4.X (DHCP)
+      dhcp4: no
+      addresses: [192.168.4.30/24]
+      routes:
+        - to: 0.0.0.0/0
+          via: 192.168.4.1
+          metric: 99
+    enp0s9:  # Interface for 192.168.5.X (Static IP)
+      dhcp4: yes
 EOF
 
-# generate and apply netplan configuration
-netplan generate && netplan apply
-systemctl restart NetworkManager
+# Apply the netplan configuration
+netplan generate
+netplan apply
 
-# show the routing table
-sleep 10
+# Confirm network configuration
 ip route show
-echo "~* client2 is DHCP-configured from both dns_dhcp_lan amd mgmt*~"
+
+echo "~* Web server setup is complete *~"
