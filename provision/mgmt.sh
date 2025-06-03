@@ -6,21 +6,23 @@ network:
   version: 2
   ethernets:
     enp0s8:
-      dhcp4: no
-      addresses: [192.168.56.10/24]
+      dhcp4: no                             # static IP for enp0s8
+      addresses: [192.168.56.10/24]         # IP for host-only network
       routes:
-        - to: default
-          via: 192.168.56.1
+        - to: 0.0.0.0/0                     # default route for enp0s8          
+          via: 192.168.56.1                 # default gateway for host-only network
       nameservers:
-        addresses: [8.8.8.8]  
+        addresses: [8.8.8.8]                # DNS resolver
     enp0s9:
-      dhcp4: no
-      addresses: [192.168.5.10/24]
-      # routes:
-      #   - to: default
-      #     via: 192.168.5.1
-      # nameservers:
-      #   addresses: [8.8.8.8]     
+      dhcp4: no                             # static IP for enp0s9 (acts as DHCP server)              
+      addresses: [192.168.5.10/24]          # IP for mgmt network 
+      routing-policy:
+        - from: 192.168.5.0/24              # routing policy for mgmt network
+          table: 100                        # custom routing table
+      routes:
+        - to: 0.0.0.0/0                     # default route for enp0s9    
+          via: 192.168.5.1                  # default gateway for mgmt network
+          table: 100                        # using separate routing table to avoid conflicts with enp0s8
 EOF
 
 # Set DNS resolver
@@ -36,6 +38,9 @@ apt-get install -y dnsmasq net-tools openssh-server
 # Enable and start the SSH service for mgmt server 
 systemctl enable ssh
 systemctl start ssh
+
+# Call the script for setting up Nagios for monitoring
+# bash /vagrant/provision/mgmt-software/nagios.sh
 
 # Generate the SSH key for the vagrant user if it does not exist
 sudo -u vagrant bash <<EOF
@@ -55,6 +60,7 @@ cp /home/vagrant/.ssh/id_rsa.pub /vagrant/ssh_keys/mgmt_vagrant_id_rsa.pub
 echo "~* management server SSH's public key *~"
 cat /home/vagrant/.ssh/id_rsa.pub   
 
+# generate and apply netplan configuration
 netplan generate
 netplan apply
 sleep 3 
@@ -73,6 +79,7 @@ dhcp-option=3,192.168.5.1
 dhcp-option=6,192.168.5.10
 EOF
 
+# Restart dnsmasq service
 systemctl restart dnsmasq
 sleep 10
 cat /etc/dnsmasq.conf  # Make sure it's listening on enp0s9
