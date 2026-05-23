@@ -3,8 +3,9 @@
 # Setting the MySQl root password 
 MYSQL_ROOT_PASSWORD="root"
 
-# install the MySQL
 apt-get update
+
+# install the MySQL
 apt-get install -y mysql-server
 
 # Enable and start the MySQL service
