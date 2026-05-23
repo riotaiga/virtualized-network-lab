@@ -1,10 +1,14 @@
 #!/bin/bash
 
-# Configure static IPs via netplan
+# Wipe all existing netplan files so Vagrant's 50-vagrant.yaml doesn't conflict
+# with our config. Include enp0s3 (NAT adapter) so vagrant ssh and internet still work.
+rm -f /etc/netplan/*.yaml
 cat <<EOF > /etc/netplan/01-netcfg.yaml
 network:
   version: 2
   ethernets:
+    enp0s3:
+      dhcp4: true                           # NAT adapter — keeps vagrant ssh and internet working
     enp0s8:
       dhcp4: no                           # static IP for enp0s8
       addresses: [192.168.4.20/24]        # IP for the DHCP server
@@ -18,38 +22,40 @@ network:
       dhcp4: true
 EOF
 
+chmod 600 /etc/netplan/*.yaml
+
 # Set DNS resolver
 systemctl stop systemd-resolved           # disable systemd-resolved
 systemctl disable systemd-resolved
 rm -f /etc/resolv.conf
 echo "nameserver 8.8.8.8" > /etc/resolv.conf
 
-# install requred package
-apt-get update 
-apt-get install -y dnsmasq net-tools openssh-server
+apt-get update
+
+apt-get install -y dnsmasq net-tools openssh-server sshpass
 
 # enable and start the SSH service for mgmt server
 systemctl enable ssh
 systemctl start ssh
 
-# check if the .ssh directory is available
+# Prepare SSH directory — management server will push the public key directly
 mkdir -p /home/vagrant/.ssh
 chmod 700 /home/vagrant/.ssh
-
-# add management server's public key to authorized_keys if it does not exist
-if [ -f /vagrant/ssh_keys/mgmt_vagrant_id_rsa.pub ]; then
-    cat /vagrant/ssh_keys/mgmt_vagrant_id_rsa.pub >> /home/vagrant/.ssh/authorized_keys
-    chmod 600 /home/vagrant/.ssh/authorized_keys   # read and write only
-    chown -R vagrant:vagrant /home/vagrant/.ssh    # making sure vagrant owns the .ssh directory
-    echo "Management server public key added to authorized_keys."
-else
-    echo "Management server public key not found in /vagrant/ssh_keys."
-fi
+chown -R vagrant:vagrant /home/vagrant/.ssh
+echo "Configured .ssh directory; mgmt will install authorized_keys over the network."
 
 # generate and apply netplan configuration
 netplan generate
 netplan apply
-sleep 3 
+
+# Wait up to 60s for DHCP lease on inet5 (enp0s9) from mgmt — do NOT use a fixed sleep
+for i in $(seq 1 12); do
+  ip addr show enp0s9 | grep -q 'inet 192\.168\.5\.' && break
+  echo "Waiting for inet5 DHCP lease on enp0s9... ($i/12)"
+  sleep 5
+done
+ip addr show enp0s9
+ip route show
 
 # Find network interface for 192.168.4.20
 INTERFACE4=$(ip -o addr show | awk '/192\.168\.4\.20/ {print $2}')
@@ -69,4 +75,20 @@ EOF
 systemctl restart dnsmasq
 sleep 5
 ip route show
+
+# Fetch mgmt server's public key — runs after netplan so inet5 (enp0s9) has a DHCP IP
+MGMT_KEY=$(sshpass -p vagrant ssh \
+  -o StrictHostKeyChecking=no \
+  -o ConnectTimeout=10 \
+  vagrant@192.168.5.10 \
+  "cat ~/.ssh/id_rsa.pub" 2>/dev/null || true)
+if [ -n "$MGMT_KEY" ]; then
+  echo "$MGMT_KEY" >> /home/vagrant/.ssh/authorized_keys
+  chmod 600 /home/vagrant/.ssh/authorized_keys
+  chown vagrant:vagrant /home/vagrant/.ssh/authorized_keys
+  echo "~* mgmt public key installed — passwordless SSH from mgmt is ready *~"
+else
+  echo "~* WARNING: could not reach mgmt at 192.168.5.10. Run 'vagrant provision dns_dhcp_lan' after mgmt is up *~"
+fi
+
 echo "~* dns_dhcp_lan is ready *~"

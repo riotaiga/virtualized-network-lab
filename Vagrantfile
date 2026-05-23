@@ -1,14 +1,64 @@
 Vagrant.configure("2") do |config|
+
+  # Read the host's standard id_rsa public key and inject it into VMs during provisioning
+  # so `ssh vagrant@192.168.56.10` works without a password (no -i flag needed).
+  # If ~/.ssh/id_rsa does not exist yet, run `ssh-keygen -t rsa` on your host first.
+  HOST_PUB_KEY_PATH = File.expand_path("~/.ssh/id_rsa.pub")
+  HOST_PUB_KEY = File.exist?(HOST_PUB_KEY_PATH) ? File.read(HOST_PUB_KEY_PATH).strip : nil
+  puts "==> [host-pubkey] WARNING: ~/.ssh/id_rsa.pub not found — passwordless SSH will not be set up. Run: ssh-keygen -t rsa" unless HOST_PUB_KEY
+
+  # Box used by all VMs
+  config.vm.box = "bento/ubuntu-24.04"
+  config.vm.box_version = "202510.26.0"
+
+  # Disable shared vagrant folders
+  config.vm.synced_folder ".", "/vagrant", disabled: true
+
+  ######################
+  # Management Server
+  ######################
+  config.vm.define "mgmt" do |node|
+    node.vm.hostname = "mgmt"
+    node.vm.provider :virtualbox do |vb|
+      vb.name = "mgmt"
+      vb.memory = 2048
+      vb.cpus = 2
+    end
+    # use the static IP address for the host-only network
+    node.vm.network :private_network, ip: "192.168.56.10", adapter: 2
+    # Internal network (inet5) for DHCP clients, mgmt server will be the DHCP server
+    node.vm.network :private_network, ip: "192.168.5.10", auto_config: false, virtualbox__intnet: "inet5", adapter: 3
+    node.vm.provision "shell", path: "provision/mgmt.sh"
+    # Install Ansible and scaffold on mgmt VM after networking is configured
+    node.vm.provision "shell", path: "provision/setup-ansible.sh"
+    # Inject the Windows host's public key so VS Code Remote SSH connects without a password
+    if HOST_PUB_KEY
+      node.vm.provision "shell", name: "inject-host-pubkey", inline: <<-SHELL
+        KEY='#{HOST_PUB_KEY}'
+        mkdir -p /home/vagrant/.ssh
+        if ! grep -qF "$KEY" /home/vagrant/.ssh/authorized_keys 2>/dev/null; then
+          echo "$KEY" >> /home/vagrant/.ssh/authorized_keys
+          echo "[host-pubkey] Injected host public key into authorized_keys"
+        else
+          echo "[host-pubkey] Host public key already present — skipping"
+        fi
+        chmod 700 /home/vagrant/.ssh
+        chmod 600 /home/vagrant/.ssh/authorized_keys
+        chown -R vagrant:vagrant /home/vagrant/.ssh
+      SHELL
+    end
+  end
+
   ########################################
   # DNS DHCP Host for the hostonly network
+  # Provisioned after mgmt so it can fetch mgmt's public key on first vagrant up
   ########################################
   config.vm.define "dns_dhcp_host" do |node|
-    node.vm.hostname = "dns-dhcp-host"        # Using Ubuntu 20.04 base box 
-    node.vm.box = "ubuntu/focal64"
+    node.vm.hostname = "dns-dhcp-host"
     node.vm.provider :virtualbox do |vb|
       vb.name = "dns_dhcp_host"               # Name of the VM in VirtualBox
       vb.memory = 512                         # Memory allocated to the VM (512MB RAM)
-      vb.cpus = 1                             # 1 CPU allocated to the VM            
+      vb.cpus = 1                             # 1 CPU allocated to the VM
     end
     # using static IP address for the host-only network
     node.vm.network :private_network, ip: "192.168.56.20", adapter: 2
@@ -16,29 +66,10 @@ Vagrant.configure("2") do |config|
   end
 
   ######################
-  # Management Server
-  ######################
-  config.vm.define "mgmt" do |node|
-    node.vm.hostname = "mgmt"
-    node.vm.box = "ubuntu/focal64"
-    node.vm.provider :virtualbox do |vb|
-      vb.name = "mgmt"
-      vb.memory = 1024
-      vb.cpus = 1
-    end
-    # use the static IP address for the host-only network
-    node.vm.network :private_network, ip: "192.168.56.10", adapter: 2
-    # Internal network (inet5) for DHCP clients, mgmt server will be the DHCP server
-    node.vm.network :private_network, ip: "192.168.5.10", auto_config: false, virtualbox__intnet: "inet5", adapter: 3
-    node.vm.provision "shell", path: "provision/mgmt.sh"
-  end
-
-  ######################
   # Router
   ######################
   config.vm.define "router" do |node|
     node.vm.hostname = "router"
-    node.vm.box = "ubuntu/focal64"
     node.vm.provider :virtualbox do |vb|
       vb.name = "router"
       vb.memory = 512
@@ -46,8 +77,8 @@ Vagrant.configure("2") do |config|
     end
     # Internal network (inet4), have a static IP address for the router
     node.vm.network :private_network, ip: "192.168.4.1", auto_config: false, virtualbox__intnet: "inet4", adapter: 2
-    # Internal network (inet5), gets the IP address from the DHCP server (mgmt server)
-    node.vm.network :private_network, type: "dhcp", virtualbox__intnet: "inet5", adapter: 3
+    # Internal network (inet5), static gateway IP — the router IS the gateway for 192.168.5.0/24
+    node.vm.network :private_network, ip: "192.168.5.1", auto_config: false, virtualbox__intnet: "inet5", adapter: 3
     # bridge network to host Wi-Fi network which is used for the router to connect to the internet
     node.vm.network :public_network, bridge: "Intel(R) Wi-Fi 6 AX200 160MHz", auto_config: false, adapter: 4
     node.vm.provision "shell", path: "provision/router.sh"
@@ -58,7 +89,6 @@ Vagrant.configure("2") do |config|
   ##################
   config.vm.define "dns_dhcp_lan" do |node|
     node.vm.hostname = "dns-dhcp-lan"
-    node.vm.box = "ubuntu/focal64"
     node.vm.provider :virtualbox do |vb|
       vb.name = "dns_dhcp_lan"
       vb.memory = 1024
@@ -77,10 +107,9 @@ Vagrant.configure("2") do |config|
   ####################
   config.vm.define "client1" do |node|
     node.vm.hostname = "client1"
-    node.vm.box = "ubuntu/focal64"
     node.vm.provider :virtualbox do |vb|
       vb.name = "client1"
-      vb.memory = 512
+      vb.memory = 1024
       vb.cpus = 1
     end
 
@@ -89,15 +118,19 @@ Vagrant.configure("2") do |config|
     # Configure the private network with DHCP-assigned IP address from dns_dhcp_lan server
     node.vm.network :private_network, type: "dhcp", virtualbox__intnet: "inet5", auto_config: false, adapter: 3
     node.vm.provision "shell", path: "provision/client1.sh"
+
+    node.vm.network "forwarded_port", guest: 3000, host: 3000   # Grafana (in order to access from my personal host)
+    node.vm.network "forwarded_port", guest: 9090, host: 9090   # Prometheus (in order to access from my personal host)
   end
 
+  ###################
   # Client 2
+  ###################
   config.vm.define "client2" do |node|
     node.vm.hostname = "client2"
-    node.vm.box = "ubuntu/focal64"
     node.vm.provider :virtualbox do |vb|
       vb.name = "client2"
-      vb.memory = 512
+      vb.memory = 1024
       vb.cpus = 1
     end
 
@@ -113,14 +146,17 @@ Vagrant.configure("2") do |config|
   ######################
   config.vm.define "database" do |node|
     node.vm.hostname = "database"
-    node.vm.box = "ubuntu/focal64"
     node.vm.provider :virtualbox do |vb|
       vb.name = "database"
-      vb.memory = 2048
+      vb.memory = 1024
       vb.cpus = 1
     end
 
-    # Add four 20GB disks for RAID 5
+    ########
+    # RAID 5
+    ########
+    # Four 20GB disks for RAID 5 (requires Vagrant 2.2.8+; set VAGRANT_EXPERIMENTAL="disks" if on older versions)
+    # These become /dev/sdb, /dev/sdc, /dev/sdd, /dev/sde inside the VM (sda is the primary boot disk)
     node.vm.disk :disk, size: "20GB", name: "database-disk0.vdi", primary: false
     node.vm.disk :disk, size: "20GB", name: "database-disk1.vdi", primary: false
     node.vm.disk :disk, size: "20GB", name: "database-disk2.vdi", primary: false
@@ -131,30 +167,8 @@ Vagrant.configure("2") do |config|
     # Private network with static IP 192.168.5.50
     node.vm.network :private_network, ip: "192.168.5.50", auto_config: false, virtualbox__intnet: "inet5", adapter: 3
 
-    # Provisioning script for RAID 5 setup
-    node.vm.provision "shell", path: "provision/software-raid/setup-raid5.sh"
     node.vm.provision "shell", path: "provision/database.sh"
-    node.vm.provision "shell", path: "provision/mysql-setup.sh"
-  end
-
-  ######################
-  # Web Server
-  ######################
-  config.vm.define "webserver" do |node|
-    node.vm.hostname = "webserver"
-    node.vm.box = "ubuntu/focal64"
-    node.vm.provider :virtualbox do |vb|
-      vb.name = "webserver"
-      vb.memory = 1024
-      vb.cpus = 1
-    end
-    
-    # Configure the private network with static IP address
-    node.vm.network :private_network, ip: "192.168.4.30", virtualbox__intnet: "inet4", auto_config: false, adapter: 2
-    # Configure to have assigned with DHCP in 192.168.5.X network
-    node.vm.network :private_network, type: "dhcp", virtualbox__intnet: "inet5", auto_config: false, adapter: 3
-    node.vm.provision "shell", path: "provision/web-server.sh"
-    node.vm.provision "shell", path: "provision/webserver-contents/install-node-prisma.sh"
-    node.vm.provision "shell", path: "provision/webserver-contents/setup-prisma-app.sh"
+    #node.vm.provision "shell", path: "provision/mysql-setup.sh"
+    #node.vm.provision "shell", path: "provision/software-raid/setup-raid5.sh"
   end
 end

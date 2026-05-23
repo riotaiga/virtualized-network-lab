@@ -16,5 +16,7 @@ redhat-test/
 # remove public key from the repo
 ssh_keys/
 
-# Ignore .drawio file 
+# Ignore .drawio file and other development phase files
 *.drawio
+Network_Diagram.drawio
+

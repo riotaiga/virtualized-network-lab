@@ -1,8 +1,11 @@
 #!/bin/bash
 
-# Update and install necessary packages
 apt-get update
-apt-get install -y net-tools openssh-server
+
+# Pre-seed debconf to prevent interactive prompt from iptables-persistent
+echo "iptables-persistent iptables-persistent/autosave_v4 boolean true" | debconf-set-selections
+echo "iptables-persistent iptables-persistent/autosave_v6 boolean false" | debconf-set-selections
+DEBIAN_FRONTEND=noninteractive apt-get install -y net-tools openssh-server sshpass iptables-persistent
 
 # Enable the IP forwarding 
 sudo sysctl -w net.ipv4.ip_forward=1
@@ -14,30 +17,27 @@ sed -i 's/#net.ipv4.ip_forward=1/net.ipv4.ip_forward=1/' /etc/sysctl.conf
 systemctl enable ssh
 systemctl start ssh
 
-# check if the .ssh directory is available
+# Prepare SSH directory — management server will push the public key directly
 mkdir -p /home/vagrant/.ssh
 chmod 700 /home/vagrant/.ssh
+chown -R vagrant:vagrant /home/vagrant/.ssh
+echo "Configured .ssh directory; mgmt will install authorized_keys over the network."
 
-# add management server's public key to authorized_keys if it does not exist
-if [ -f /vagrant/ssh_keys/mgmt_vagrant_id_rsa.pub ]; then
-    cat /vagrant/ssh_keys/mgmt_vagrant_id_rsa.pub >> /home/vagrant/.ssh/authorized_keys
-    chmod 600 /home/vagrant/.ssh/authorized_keys   # read and write only
-    chown -R vagrant:vagrant /home/vagrant/.ssh    # making sure vagrant owns the .ssh directory
-    echo "Management server public key added to authorized_keys."
-else
-    echo "Management server public key not found in /vagrant/ssh_keys."
-fi
-
-# Configure static IPs via netplan
+# Wipe all existing netplan files so Vagrant's 50-vagrant.yaml doesn't conflict
+# with our config. Include enp0s3 (NAT adapter) so vagrant ssh and internet still work.
+rm -f /etc/netplan/*.yaml
 cat <<EOF > /etc/netplan/01-netcfg.yaml
 network:
   version: 2
   ethernets:
+    enp0s3:
+      dhcp4: true                           # NAT adapter — keeps vagrant ssh and internet working
     enp0s8:
       dhcp4: no                            
       addresses: [192.168.4.1/24]           # static IP for enp0s8
-    enp0s9:                                
-      dhcp4: true                           # DHCP for enp0s9         
+    enp0s9:
+      dhcp4: no
+      addresses: [192.168.5.1/24]           # static gateway IP for inet5 network
     enp0s10:                 
       dhcp4: true                           # DHCP for enp0s10  
       routes:
@@ -45,6 +45,8 @@ network:
           via: 192.168.1.1                  # gateway for the enp0s10 
           metric: 99                        # lower metric for higher priority 
 EOF
+
+chmod 600 /etc/netplan/*.yaml
 
 # Apply the netplan configuration
 netplan generate && netplan apply
@@ -58,11 +60,23 @@ iptables -A FORWARD -i enp0s9 -o enp0s10 -j ACCEPT          # Allow traffic from
 mkdir -p /etc/iptables
 iptables-save > /etc/iptables/rules.v4
 
-sleep 10 
+sleep 10
 ip route show
 
-# Disable the interface to prevent accidental use
-#ip link set enp0s3 down
+# Fetch mgmt server's public key — runs after netplan so inet5 (enp0s9) has a DHCP IP
+MGMT_KEY=$(sshpass -p vagrant ssh \
+  -o StrictHostKeyChecking=no \
+  -o ConnectTimeout=10 \
+  vagrant@192.168.5.10 \
+  "cat ~/.ssh/id_rsa.pub" 2>/dev/null || true)
+if [ -n "$MGMT_KEY" ]; then
+  echo "$MGMT_KEY" >> /home/vagrant/.ssh/authorized_keys
+  chmod 600 /home/vagrant/.ssh/authorized_keys
+  chown vagrant:vagrant /home/vagrant/.ssh/authorized_keys
+  echo "~* mgmt public key installed — passwordless SSH from mgmt is ready *~"
+else
+  echo "~* WARNING: could not reach mgmt at 192.168.5.10. Run 'vagrant provision router' after mgmt is up *~"
+fi
 
 echo "~* Router is ready *~"
  
