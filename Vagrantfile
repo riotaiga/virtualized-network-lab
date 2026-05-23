@@ -167,6 +167,7 @@ Vagrant.configure("2") do |config|
     # Private network with static IP 192.168.5.50
     node.vm.network :private_network, ip: "192.168.5.50", auto_config: false, virtualbox__intnet: "inet5", adapter: 3
 
+    # RAID configuration are still work in progress as of now 
     node.vm.provision "shell", path: "provision/database.sh"
     #node.vm.provision "shell", path: "provision/mysql-setup.sh"
     #node.vm.provision "shell", path: "provision/software-raid/setup-raid5.sh"
